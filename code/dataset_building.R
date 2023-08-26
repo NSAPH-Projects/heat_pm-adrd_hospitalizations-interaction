@@ -14,7 +14,10 @@ f <- list.files("/n/dominici_nsaph_l3/Lab/projects/analytic/adrd_hospitalization
 
 ADRD_hospitalization <- as.data.frame(rbindlist(lapply(f,
                                                        read_fst,
-                                                       as.data.table = TRUE)))
+                                                       as.data.table = TRUE))) %>% 
+  filter(AGE < 100)%>%
+  mutate(QID = as.character(QID))
+
 # Get medpar admissions data
 f <- list.files("/n/dominici_nsaph_l3/Lab/projects/analytic/admissions_by_year/",
                 pattern = "\\.fst",
@@ -27,7 +30,9 @@ myvars <- c("QID", "ADATE", "DDATE", "zipcode_R", "DIAG1", "DIAG2", "DIAG3", "DI
 medpar_admissions <- as.data.frame(rbindlist(lapply(f,
                                                     read_fst,
                                                     columns = myvars,
-                                                    as.data.table = TRUE)))
+                                                    as.data.table = TRUE)))%>% 
+  filter(AGE < 100)%>%
+  mutate(QID = as.character(QID))
 
 ## Define first ADRD hospitalization ----
 hosp_tab = data.table(ADRD_hospitalization)
@@ -56,23 +61,35 @@ sum(is.na(medpar_admissions$ADRD_hosp))
 medpar_admissions$ADATE = as.Date(medpar_admissions$ADATE, "%d%b%Y")
 head(medpar_admissions)
 
-# Check time difference between first ADRD hospitalization and other admissions and select difference > 1 month
+# Check time difference between first ADRD hospitalization and other admissions 
 rehospitalizations = medpar_admissions %>%
   mutate(days_to_rehosp = as.numeric(difftime(ADATE, ADRD_hosp, units =  "days")))%>%
-  subset(days_to_rehosp > 30)
+  subset(days_to_rehosp > 0)
 
 summary(rehospitalizations$days_to_rehosp)
 
-# Select first rehospitalization after first ADRD admission
+# Select first rehospitalization after first ADRD admission and select difference > 1 month
 rehosp_tab = data.table(rehospitalizations)
-first_rehosp = as.data.frame(rehosp_tab[rehosp_tab[ , .I[which.min(ADATE)], by = QID]$V1])
+first_rehosp = as.data.frame(rehosp_tab[rehosp_tab[ , .I[which.min(ADATE)], by = QID]$V1])%>%
+  filter(days_to_rehosp > 30)
+
 head(first_rehosp)
 summary(first_rehosp$days_to_rehosp)
+
 first_rehosp = first_rehosp %>%
   rename(readmission = ADATE) %>%
-  select(-DDATE)
+  mutate(DDATE = as.Date(DDATE, "%d%b%Y"))
 
-save(first_rehosp, file = "../data/input/rehospitalization_data.RData")
+save(first_rehosp, file = "../data/input/rehospitalization_data_total.RData")
+
+load("../data/input/rehospitalization_data_total.RData")
+
+# Warm season (May 01 - September 30)
+first_rehosp_warm = first_rehosp %>%
+  filter(month(readmission) %in% 5:9)
+
+save(first_rehosp_warm, file = "../data/input/rehospitalization_data_warmseason.RData")
+
 
 
 
