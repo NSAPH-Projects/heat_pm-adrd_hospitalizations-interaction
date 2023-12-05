@@ -11,7 +11,7 @@ library(survival)
 library(ggplot2)
 setwd("~/heat_pm-adrd_hospitalizations-interaction/code")
 
-load("../data/scratch/case_day-crossover-exposure.Rdata")
+load("../data/scratch/case-crossover-exposure.Rdata")
 data = as.data.table(data)
 
 # data summary
@@ -35,7 +35,6 @@ data[case_day == 0, .(mean(heat_index), sd(heat_index))]
 
 
 ########### TABLE 1 ##############
-names(data2)
 data2<-subset(data,case_day==1)
 
 #### CREATING TABLE 1######
