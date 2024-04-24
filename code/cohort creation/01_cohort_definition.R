@@ -75,7 +75,8 @@ hospitalizations = medpar_admissions %>%
 # Select first hospitalization after first ADRD discharge and select difference > 1 month
 hosp_tab = data.table(hospitalizations)
 first_hosp = as.data.frame(hosp_tab[hosp_tab[ , .I[which.min(ADATE)], by = QID]$V1]) %>%
-  filter(days_to_hosp_disc > 30) # comment if interested also in hospitalization within first month
+  filter(days_to_hosp_disc > 30)%>% # comment if interested also in hospitalization within first month
+  filter(ADM_SOURCE %in% c("7","1","2"))
 
 
 first_hosp = first_hosp %>%
@@ -110,7 +111,7 @@ first_hosp_warm = first_hosp_warm %>%
 save(first_hosp_warm, file = "../data/scratch/hospitalization_cohort_warmseason.RData")
 
 ## Create case-crossover data ----
-load("../data/scratch/hospitalization_cohort_warmseason.RData")
+# load("../data/scratch/hospitalization_cohort_warmseason.RData")
 
 # Identify day of the week of case
 extract_case_control_dates = function(case_day){
@@ -135,7 +136,7 @@ patient_data = first_hosp_warm %>%
 patient_days = merge(x = patient_data, y = ID_monthdays, by = "QID")
 
 save(patient_days, file = "../data/scratch/case-crossover-cohort_before_check.RData")
-load("../data/scratch/case-crossover-cohort.RData")
+# load("../data/scratch/case-crossover-cohort.RData")
 
 # Check no hospitalization on control days
 
@@ -182,56 +183,75 @@ final_cohort[final_cohort$QID %in%prob_ID, ]
 final_cohort = final_cohort[!final_cohort$QID %in%prob_ID, ]
 length(unique(final_cohort$QID))
 
-save(final_cohort, file = "../data/scratch/final-cohort_before_exposure.RData")
+
+# Add denom information and Koppen ----------------------------------------
+Koppen_counties <- read_csv("/n/dominici_nsaph_l3/projects/temperature-adrd-casecrossover/data/Koppen_counties.csv")
+
+final_cohort = final_cohort %>%
+  mutate(year = year(admission))
+
+# Load denom files
+dir <- "/n/dominici_nsaph_l3/Lab/projects/analytic/denom_by_year/"
+files <- list.files(dir, pattern = ".fst", full.names = TRUE)
+cols <- c("zip", "year", "qid", "sex", "race", "age", "dual", "fips")
+
+denom <- as.data.frame(rbindlist(lapply(files,
+                                        read_fst,
+                                        columns = cols,
+                                        as.data.table = TRUE)))
+# Merge cohort and denom data
+denom_merged = merge(final_cohort, denom, 
+      by.x = c("QID", "year"), by.y = c("qid", "year"))
+
+# fip-zip x year
+fips_df = denom %>%
+  select(c(year, zip, fips))%>%
+  group_by(year, zip)%>% 
+  filter(row_number() == 1) %>%
+  ungroup()%>%
+  na.omit()
+
+# merge Koppen
+Koppen_counties$Koppen <- factor(Koppen_counties$Koppen, 
+                                 c("BSh", "BSk", "BWh", "BWk",
+                                   "Dfa", "Dfb", "Dfc", "Dsa", "Dsb", "Dwa", "Dwb",
+                                   "Cfa", "Cfb", "Csa", "Csb",
+                                   "Af", "Am", "Aw"),
+                                 c("Semi-arid hot", "Semi-arid cold", "Desert hot", "Desert cold",
+                                   "Continental hot summer", "Continental warm summer",
+                                   "Continental cold summer", "Continental dry hot summer",
+                                   "Continental dry warm summer", "Continental dry winter hot summer",
+                                   "Continental dry winter warm summer",
+                                   "Temperate hot summer", "Temperate warm summer",
+                                   "Temperate dry hot summer", "Temperate dry warm summer",
+                                   "Tropical rainforest", "Tropical monsoon", 
+                                   "Tropical savanna (dry winter)"))
+
+Koppen_counties$StCoFIPS = as.integer(Koppen_counties$StCoFIPS)
+Koppen_zip_df <- merge(fips_df, Koppen_counties, by.x = "fips", by.y = "StCoFIPS", all.x = TRUE)
+
+# merge data
+denom_merged = merge(denom_merged, Koppen_zip_df, by = c("year", "zip"), all.x = T)
+prob_ids = unique(denom_merged[is.na(denom_merged$Koppen),"QID"])
 
 
+denom_merged = denom_merged[!denom_merged$QID %in% prob_ids,]
 
+denom_merged$Koppen_zone <- factor(denom_merged$Koppen,
+                                  c("Semi-arid hot", "Semi-arid cold", "Desert hot", "Desert cold",
+                                    "Continental hot summer", "Continental warm summer",
+                                    "Continental cold summer", "Continental dry hot summer",
+                                    "Continental dry warm summer", "Continental dry winter hot summer",
+                                    "Continental dry winter warm summer",
+                                    "Temperate hot summer", "Temperate warm summer",
+                                    "Temperate dry hot summer", "Temperate dry warm summer",
+                                    "Tropical rainforest", "Tropical monsoon", 
+                                    "Tropical savanna (dry winter)"), 
+                                  c("B", "B", "B", "B",
+                                    "D", "D", "D", "D", "D", "D", "D",
+                                    "C", "C", "C", "C",
+                                    "A", "A", "A"))
+table(denom_merged$Koppen_zone)
+length(unique(denom_merged$QID))
 
-# OLD code: when problematic IDs ------------------------------------------
-
-# Note: patient with number of issues > 4 (maximum number of control days) are patients where control days coincide with discharge date of an hospitalization and admission date of the following one
-
-check_controldays[check_controldays$QID =="lllllll04UX0Sol",]
-
-# Example patient without issue
-patient_days[!patient_days$QID %in% check_controldays$QID,]
-
-# how many patients have this issue?
-length(unique(check_controldays$QID))/ length(first_hosp_warm$QID)*100 # 5.71%
-
-# number of critical control days per patient
-num_critcal_ID = check_controldays %>%
-  group_by(QID) %>%
-  summarise(num_critic = sum(control_hosp)) %>%
-  mutate(num_critic = ifelse(num_critic > 4, 4, num_critic))
-
-hist(num_critcal_ID$num_critic)
-
-length(num_critcal_ID$QID[num_critcal_ID$num_critic >2])/ length(first_hosp_warm$QID)*100
-
-length(num_critcal_ID$QID[num_critcal_ID$num_critic >1])/ length(first_hosp_warm$QID)*100
-
-num_critcal_ID %>%
-  ggplot( aes(x=num_critic)) +
-  geom_histogram( fill="#69b3a2", color="#e9ecef", alpha=0.9) +
-  ggtitle("Distribution of 'number of problematic control days per patient'") +
-  theme(plot.title = element_text(size=15)) +
-  xlab("number of problematic control days per patient")
-
-# Remove patients with num_critic > 0
-final_cohort = patient_days[!patient_days$QID %in% prob_IDs,]
-length(unique(final_cohort$QID))
-length(unique(patient_days$QID)) - length(prob_IDs)
-
-
-# Check NA
-sum(is.na(final_cohort$zipcode_R)) # some NA in this variable
-prob_ID = unique(final_cohort$QID[is.na(final_cohort$zipcode_R)]) # 46 problematic IDs
-final_cohort[final_cohort$QID %in%prob_ID, ]
-
-# Remove patients with NA zipcode
-final_cohort = final_cohort[!final_cohort$QID %in%prob_ID, ]
-
-
-save(final_cohort, file = "../data/scratch/final-cohort_before_exposure.RData")
-load("../data/scratch/final-cohort_before_exposure.RData")
+save(denom_merged, file = "../data/scratch/final-cohort_before_exposure.RData")

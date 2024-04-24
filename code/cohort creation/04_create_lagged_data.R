@@ -78,9 +78,10 @@ O3_dat = O3_dat %>%
   select(-STATE)
 
 # Merge exposures
-df_list <- list(pm25_dat, no2_dat, O3_dat)
+exposure_dat = pm25_dat %>%
+  full_join(no2_dat, by=c("ZIP", "date"))%>%
+  full_join(O3_dat, by=c("ZIP", "date"))
 
-exposure_dat = df_list %>% reduce(full_join, by=c("ZIP", "date"))
 exposure_dat$ZIP = sprintf("%05d", as.integer(exposure_dat$ZIP)) 
 
 # Daily max temperature, min humidity, heat index data
@@ -114,6 +115,7 @@ min_humid$min_humid[min_humid$min_humid > 100] = 100
 
 # calculate heat index
 heat_index <- merge(max_temp, min_humid, by = c("zip", "date"))
+rm(min_humid, max_temp)
 heat_index[, heat_index := 
              heat.index(max_temp - 273.15, 
                         rh = min_humid,
@@ -128,34 +130,47 @@ heat_index[order(zip, date), paste0("heat_index_lag_", 1:14) := shift(.SD, 1:14,
 heat_index = na.omit(heat_index)
 
 # Merge 
-exposure_dat = exposure_dat %>% 
+exposure_dat = pm25_dat %>%
+  full_join(no2_dat, by=c("ZIP", "date"))%>%
+  full_join(O3_dat, by=c("ZIP", "date")) %>% 
+  mutate(ZIP = sprintf("%05d", as.integer(ZIP)) ) %>%
   rename(zip = ZIP) %>%
   full_join(heat_index, by=c("zip", "date"))
 
 save(exposure_dat, file = "../data/scratch/exposure_lagged_dat.Rdata")
 
-
+rm(pm25_dat, no2_dat, O3_dat, heat_index)
 # Merge with patient data
 load("../data/scratch/exposure_lagged_dat.Rdata")
 load("../data/scratch/case-crossover-exposure.Rdata")
 
-data = data[,1:16] %>%
+data = data %>%
+  select(-c(fips.x, fips.y, pm25, no2, ozone, max_temp, min_humid, heat_index) ) %>%
   left_join(exposure_dat, by=c('zip', 'date')) 
 
-data = data%>% 
+data = data %>%
   rename(pm_lag_0 = pm25, 
-         ozone_lag_0 = ozone,
          no2_lag_0 = no2,
-         heat_index_lag_0 = heat_index,
-         max_temp_lag_0 = max_temp,
-         min_humid_lag_0 = min_humid)
-save(data, file = "../data/scratch/cohort_lagged_dat.Rdata")
+         ozone_lag_0 = ozone, 
+         max_temp_lag_0 = max_temp, 
+         min_humid_lag_0 = min_humid, 
+         heat_index_lag_0 = heat_index)
 
-# ADJUST: remove data with temperature below 0 C degrees
 
-load("../data/scratch/cohort_lagged_dat.Rdata")
+# Using climate subtype for HI percentile
+lag_dat_perc <- matrix(0.0, data[, .N], 15)
+for (st in unique(data$Koppen)) {
+  ec <- ecdf(data[Koppen == st]$heat_index_lag_0)
+  lag_dat_perc[which(data[, Koppen] == st), ] <-
+    sapply(data[Koppen == st, .SD, .SDcols = paste0("heat_index_lag_", 0:14)], ec)
+}
 
-data = data[!data$QID %in% prob_ID,]
-length(unique(data$QID))
+colnames(data)[95:108] = paste0("orig_heat_index_lag_", 1:14)
+
+data = data %>%
+  rename(orig_heat_index_lag_0 = heat_index_lag_0 ) %>%
+  cbind(lag_dat_perc)
+
+colnames(data)[109:123] = paste0("heat_index_lag_", 0:14)
 
 save(data, file = "../data/scratch/cohort_lagged_dat.Rdata")
