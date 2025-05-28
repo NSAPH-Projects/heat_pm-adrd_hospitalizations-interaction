@@ -10,4 +10,6 @@ We conducted a time-stratified case-crossover analysis using data from Medicare 
 We found a linear trend between heat index and all-cause hospitalization with an odds ratio (OR) of 1.017 (95% CI: 1.004, 1.031) for extreme heat days (99<sup>th</sup> percentile) versus median. The PM<sub>2.5</sub>-hospitalization relationship was nonlinear with a steeper slope at lower concentrations. The OR for all-cause hospitalization at 10&micro;g/m<sup>3</sup> versus 5&micro;g/m<sup>3</sup> was 1.010 (95% CI: 1.005, 1.015). The joint-exposure analysis confirmed these findings; we estimated an OR for hospitalization of 1.016 (95% CI: 1.001, 1.032) on extreme heat days versus median when simultaneously adjusting for the estimated change in PM<sub>2.5</sub>. These findings underscore the importance of considering both heat and air pollution exposures in assessing health risks for ADRD populations.  
 
 ## Workflow 
--
+- cohort creation
+  - 01_cohort_definition.R
+  - 02_get_exposure.R
