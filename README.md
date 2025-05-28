@@ -20,7 +20,7 @@ We found a linear trend between heat index and all-cause hospitalization with an
   - 02_multi_exp.R: runs the linear and non-linear joint-exposures analyses without interaction and the linear joint-exposures analysis with interaction.
   - 03_multi-exp_non-linear_interaction.R: runs non-linear joint-exposures analysis with interaction. Needs utils.R.
   - 04_dependency_non-linear.R: runs the dependency analysis, including the model accounting for the association between heat index and PM<sub>2.5</sub>. Needs utils.R.
-  - 05_sensitivity_3days_avg.R: runs the sensitivity analysis.
+  - 05_sensitivity_3days_avg.R: runs the sensitivity analysis. Needs utils.R.
   - utils.R: contains the functions to create the basis for the non-linear interaction and project new data on the defined basis.
   - tab1.R: creates Table 1 and Figure 1.
   - plot_or_nonlin.R: creates Figure 2.
