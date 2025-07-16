@@ -25,3 +25,4 @@ We found a linear trend between heat index and all-cause hospitalization with an
   - tab1.R: creates Table 1 and Figure 1.
   - plot_or_nonlin.R: creates Figure 2.
   
+RStudio version: 4.3.3
